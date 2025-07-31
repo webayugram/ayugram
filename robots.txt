@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://webayugram.github.io/ayugram/sitemap.xml
