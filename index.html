@@ -663,74 +663,71 @@
     });
     window.addEventListener('load', ()=>{ resizeCanvas(); startAnim(); });
 
-    // Releases: GitHub API with correct links, fallback to local mock
-    async function loadReleases() {
-      const container = $('#releasesGrid');
-      container.innerHTML = '';
-      container.setAttribute('aria-busy', 'true');
-      let releases = null;
-      let usedFallback = false;
+   // Releases: GitHub API with correct links, fallback to local mock
+async function loadReleases() {
+  const container = $('#releasesGrid');
+  container.innerHTML = '';
+  container.setAttribute('aria-busy', 'true');
+  let releases = null;
+  let usedFallback = false;
+  try {
+    const res = await fetch('https://api.github.com/repos/AyuGram/AyuGramDesktop/releases', {
+      headers: { 'Accept': 'application/vnd.github+json' },
+      cache: 'no-store',
+      mode: 'cors'
+    });
+    if (!res.ok) throw new Error('API error: ' + res.status);
+    releases = await res.json();
+  } catch (e) {
+    usedFallback = true;
+    releases = [
+      { name: 'v5.16.4', tag_name: 'v5.16.4', published_at: '2025-07-20T12:00:00Z', prerelease:false, draft:false, html_url: 'https://github.com/AyuGram/AyuGramDesktop/releases/tag/v5.16.4' },
+      { name: 'v1.3.0', tag_name: 'v1.3.0', published_at: '2024-07-01T10:00:00Z', prerelease:false, draft:false, html_url: 'https://github.com/AyuGram/AyuGramDesktop/releases/tag/v1.3.0' }
+    ];
+  }
+
+  // убираем draft и сортируем по дате
+  releases = releases
+    .filter(r => !r.draft)
+    .sort((a, b) => new Date(b.published_at) - new Date(a.published_at));
+
+  const fmt = (iso)=> new Date(iso).toLocaleDateString('ru-RU', {
+    year:'numeric', month:'long', day:'numeric'
+  });
+
+  releases.slice(0,6).forEach(rel=>{
+    const el = document.createElement('div');
+    el.className = 'card release';
+    const tags = [];
+    if (rel.prerelease) tags.push('<span class="tag">pre‑release</span>');
+    const relName = (rel.name || rel.tag_name || 'release').toString();
+    const relUrl = rel.html_url || `${GITHUB_URL}/releases/tag/${encodeURIComponent(rel.tag_name)}`;
+    el.innerHTML = `
+      <div>
+        <div class="ver">${relName}</div>
+        <div class="date">Опубликовано: ${fmt(rel.published_at || Date.now())}</div>
+      </div>
+      <div class="tags">${tags.join('')}</div>
+      <div style="display:flex; gap:8px; flex-wrap:wrap;">
+        <button class="btn ghost btn-small open-release" type="button">Открыть</button>
+        <button class="btn btn-small copy-link" type="button">Скопировать ссылку</button>
+      </div>
+    `;
+    el.querySelector('.open-release').addEventListener('click', ()=> safeOpen(relUrl));
+    el.querySelector('.copy-link').addEventListener('click', async ()=>{
       try {
-        const res = await fetch('https://api.github.com/repos/AyuGram/AyuGramDesktop/releases', {
-          headers: { 'Accept': 'application/vnd.github+json' },
-          cache: 'no-store',
-          mode: 'cors'
-        });
-        if (!res.ok) throw new Error('API error: ' + res.status);
-        releases = await res.json();
-      } catch (e) {
-        usedFallback = true;
-        // Offline placeholders
-        releases = [
-          { name: 'v1.3.0', tag_name: 'v1.3.0', published_at: '2024-07-01T10:00:00Z', prerelease:false, draft:false, html_url: 'https://github.com/AyuGram/AyuGramDesktop/releases/tag/v1.3.0' },
-          { name: 'v1.2.1', tag_name: 'v1.2.1', published_at: '2024-05-10T12:00:00Z', prerelease:false, draft:false, html_url: 'https://github.com/AyuGram/AyuGramDesktop/releases/tag/v1.2.1' },
-          { name: 'v1.2.0-rc1', tag_name: 'v1.2.0-rc1', published_at: '2024-04-25T09:00:00Z', prerelease:true, draft:false, html_url: 'https://github.com/AyuGram/AyuGramDesktop/releases/tag/v1.2.0-rc1' }
-        ];
+        await navigator.clipboard.writeText(relUrl);
+        showToast('Ссылка на релиз скопирована');
+      } catch {
+        showToast('Не удалось скопировать, откроем страницу');
+        safeOpen(relUrl);
       }
-      const fmt = (iso)=> new Date(iso).toLocaleDateString(undefined, {year:'numeric', month:'short', day:'numeric'});
-      releases.slice(0,6).forEach(rel=>{
-        const el = document.createElement('div');
-        el.className = 'card release';
-        const tags = [];
-        if (rel.prerelease) tags.push('<span class="tag">pre-release</span>');
-        if (rel.draft) tags.push('<span class="tag">draft</span>');
-        const relName = (rel.name || rel.tag_name || 'release').toString();
-        const relUrl = (rel.html_url || (rel.tag_name ? `${GITHUB_URL}/releases/tag/${encodeURIComponent(rel.tag_name)}` : `${GITHUB_URL}/releases`));
-        el.innerHTML = `
-          <div>
-            <div class="ver">${relName}</div>
-            <div class="date">Опубликовано: ${fmt(rel.published_at || Date.now())}</div>
-          </div>
-          <div class="tags">${tags.join('')}</div>
-          <div style="display:flex; gap:8px; flex-wrap:wrap;">
-            <button class="btn ghost btn-small open-release" type="button">Открыть</button>
-            <button class="btn btn-small copy-link" type="button">Скопировать ссылку</button>
-          </div>
-        `;
-        el.querySelector('.open-release').addEventListener('click', ()=>{
-          safeOpen(relUrl);
-        });
-        el.querySelector('.copy-link').addEventListener('click', async ()=>{
-          try {
-            await navigator.clipboard.writeText(relUrl);
-            showToast('Ссылка на релиз скопирована');
-          } catch {
-            showToast('Не удалось скопировать, откроем страницу');
-            safeOpen(relUrl);
-          }
-        });
-        container.appendChild(el);
-      });
-      container.removeAttribute('aria-busy');
-      if (usedFallback) {
-        showToast('Показаны офлайн‑данные релизов');
-      }
-    }
-    if ('requestIdleCallback' in window) {
-      requestIdleCallback(loadReleases, { timeout: 2000 });
-    } else {
-      setTimeout(loadReleases, 300);
-    }
+    });
+    container.appendChild(el);
+  });
+  container.removeAttribute('aria-busy');
+  if (usedFallback) showToast('Показаны офлайн‑данные релизов');
+}
   </script>
 </body>
 </html>
